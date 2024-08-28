@@ -1,9 +1,9 @@
-<center>
-<img src="logo.png" alt="go-hotfix" style="width: 128px"/>
-<h2>hotfix</h2>
-hotfix is a golang function hot-fix solution inspired by <a href="https://github.com/lsg2020/go-hotfix">lsg2020</a>
+<div align="center" style="text-align: center">
+<img src="logo.png" alt="go-hotfix" width="128px"/>
+<h1>hotfix</h1>
+<p>hotfix is a golang function hot-fix solution inspired by <a href="https://github.com/lsg2020/go-hotfix">lsg2020</a></p>
 <hr/>
-</center>
+</div>
 
 
 > 警告: 目前尚未经过严格测试，请勿用于生产环境  
