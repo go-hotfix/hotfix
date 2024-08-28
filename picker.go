@@ -11,9 +11,10 @@ import (
 
 var closureExp = regexp.MustCompile(`func\d+(\.\d+)*`)
 
+// FuncPicker List of functions that need to be hotfix.
 type FuncPicker func(dwarfAssembly assembly.DwarfAssembly) ([]string, error)
 
-// Func 修复指定一个或者多个函数，必须使用函数的完整限定名
+// Func to specify one or more functions, you must use the full qualified name of the function.
 //
 //	example/data.TestAdd
 //	example/data.(*DataType).TestHotfix
@@ -30,7 +31,7 @@ func Func(funcNames ...string) FuncPicker {
 	}
 }
 
-// Classes 修复指定的一个或者多个类（所有成员函数），必须使用类的完整限定名
+// Classes To fix a specified class or classes (all member functions), the fully qualified name of the class must be used.
 //
 //	example/data.DataType
 //	*example/data.DataType
@@ -75,7 +76,7 @@ func Classes(classNames ...string) FuncPicker {
 	}
 }
 
-// Package 修复指定的一个或者多个包（所有非/成员函数），必须使用完整包名
+// Package To fix all export, private, and member functions in one or more packages, the full package name must be used
 //
 //	example/data
 func Package(pkgs ...string) FuncPicker {
@@ -98,7 +99,7 @@ func Package(pkgs ...string) FuncPicker {
 	}
 }
 
-// Any 组合多种方式
+// Any combine multiple FuncPicker
 func Any(funcPickers ...FuncPicker) FuncPicker {
 	return func(dwarfAssembly assembly.DwarfAssembly) ([]string, error) {
 		var methods []string

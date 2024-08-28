@@ -6,8 +6,10 @@ import (
 	"github.com/brahma-adshonor/gohook"
 )
 
+// FuncPatcher To apply function hot patching.
 type FuncPatcher func(req Request) error
 
+// GoMonkey Hot patching implementation based on monkey-patching.
 func GoMonkey() FuncPatcher {
 	return func(req Request) error {
 		// 代码热修复采用monkey-patch机制实现函数调用重定向（重写跳转指令）

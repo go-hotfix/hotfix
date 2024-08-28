@@ -19,11 +19,14 @@ func main() {
 
 func HotfixHandler(w http.ResponseWriter, r *http.Request) {
 
-	fmt.Printf("patching...")
+	fmt.Printf("apply patching...\n")
 
 	res := hotfix.Hotfix("webapp_v1.so", hotfix.Package("webapp/router"))
 
 	fmt.Fprintln(w, fmt.Sprintf("patch: %s, cost: %s ", res.Patch, res.Cost.String()))
+	if nil != res.Err {
+		fmt.Fprintln(w, "patch failed: ", res.Err)
+	}
 	fmt.Fprintln(w, "methods:")
 	for i, name := range res.Methods {
 		fmt.Fprintln(w, "\t", i, ": ", name)

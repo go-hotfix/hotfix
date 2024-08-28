@@ -21,32 +21,32 @@ import (
 var exclusivity int32
 
 type Request struct {
-	Logger        *log.Logger            // 调试日志
-	Patch         string                 // 补丁文件
-	ThreadSafe    bool                   // 是否线程安全
-	Methods       []string               // 补丁函数列表
-	Assembly      assembly.DwarfAssembly // 程序集
-	OldFuncEntrys []*proc.Function       // 待补丁函数元数据
-	OldFunctions  []reflect.Value        // 待补丁函数指针
-	NewFunctions  []reflect.Value        // 目标函数指针
+	Logger        *log.Logger            // Debug logger.
+	Patch         string                 // Plugin file.
+	ThreadSafe    bool                   // Whether it is thread safe.
+	Methods       []string               // Patching function list.
+	Assembly      assembly.DwarfAssembly // Go runtime assembly.
+	OldFuncEntrys []*proc.Function       // Old function entrys.
+	OldFunctions  []reflect.Value        // Old function values.
+	NewFunctions  []reflect.Value        // Plugin function values.
 }
 
 type Result struct {
 	Assembly   assembly.DwarfAssembly
-	Patch      string        // 补丁文件
-	ThreadSafe bool          // 是否线程安全，默认否，使用stw机制保证线程安全
-	Methods    []string      // 补丁函数列表
-	Cost       time.Duration // 消耗时间
-	Err        error         // 错误信息
-	Message    string        // 提示消息
+	Patch      string        // Plugin file
+	ThreadSafe bool          // Whether it is thread safe, the default is false, use stw mechanism to ensure thread safety.
+	Methods    []string      // Patching function list.
+	Cost       time.Duration // Total of cost time.
+	Err        error         // Patching failed reason.
+	Message    string        // Patching debug message.
 }
 
-// Hotfix 热修复函数，从so模块中加载目标函数并替换进程内的实现
+// Hotfix Apply hot patching by default.
 func Hotfix(libPath string, funcPicker FuncPicker, threadSafe ...bool) Result {
 	return DoHotfix(libPath, funcPicker, GoMonkey(), threadSafe...)
 }
 
-// DoHotfix 热修复函数，从so模块中加载目标函数并替换进程内的实现
+// DoHotfix Apply hot patching in a custom way.
 func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, threadSafe ...bool) (result Result) {
 
 	var start = time.Now()
@@ -89,13 +89,18 @@ func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, th
 
 	logger.Printf("arch: %s/%s, compiler: %s/%s, cpu: %d-bit, jump code size: %d", runtime.GOOS, runtime.GOARCH, runtime.Compiler, runtime.Version(), archMode, jumpCodeSize)
 
+	t0 := time.Now()
+
 	// 加载主程序集
 	logger.Printf("loading main assembly ...")
 	if result.Assembly, returnErr = assembly.NewDwarfAssembly(); nil != returnErr {
 		returnErr = fmt.Errorf("main assembly load failed: %w", returnErr)
 		return
 	}
-	logger.Printf("load main assembly finished")
+
+	t1 := time.Now()
+
+	logger.Printf("load main assembly finished, cost: %s", t1.Sub(t0).String())
 
 	// 输出当前已经加载的插件
 	if plugins, addrs, err := result.Assembly.SearchPlugins(); nil == err {
@@ -144,7 +149,9 @@ func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, th
 		oldFuncEntrys = append(oldFuncEntrys, entry)
 	}
 
-	logger.Printf("lookup patch functions finished")
+	t2 := time.Now()
+
+	logger.Printf("lookup patch functions finished, cost: %s", t2.Sub(t1).String())
 
 	// 加载动态库到进程空间
 	logger.Printf("opening patch %s ...", libPath)
@@ -165,7 +172,10 @@ func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, th
 		returnErr = fmt.Errorf("search plugin image failed: %s", libPath)
 		return
 	}
-	logger.Printf("opening patch %s finished", lib)
+
+	t3 := time.Now()
+
+	logger.Printf("opening patch %s finished, cost: %s", lib, t3.Sub(t2).String())
 
 	// 使用完整路径
 	libPath = lib
@@ -176,7 +186,11 @@ func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, th
 		returnErr = fmt.Errorf("%w: load plugin assembly failed: %s", err, lib)
 		return
 	}
-	logger.Printf("load patch assembly finished")
+
+	t4 := time.Now()
+	logger.Printf("load patch assembly finished, cost: %s", t4.Sub(t3).String())
+
+	logger.Printf("validating hotfix functions ... ")
 
 	newFunctions := make([]reflect.Value, 0, len(funcNames))
 	oldFunctions := make([]reflect.Value, 0, len(funcNames))
@@ -184,18 +198,18 @@ func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, th
 		// 查找插件补丁类型
 		hotfixFunc, err := result.Assembly.FindFunc(name, false)
 		if nil != err {
-			returnErr = fmt.Errorf("%w: function not found: %s", err, name)
+			returnErr = fmt.Errorf("validating failed: %w: function not found: %s", err, name)
 			return
 		}
 
 		// 如果补丁中存在某个函数则在LoadAssembly中会被替换为新函数对象，函数地址会变更为补丁函数地址
 		// 如果指定的函数补丁中不存在那么无法对这个函数进行修补
 		if newEntry := hotfixFunc.Pointer(); newEntry == uintptr(oldFuncEntrys[i].Entry) {
-			returnErr = fmt.Errorf("function not found in patch: %s", name)
+			returnErr = fmt.Errorf("validating failed: function not found in patch: %s", name)
 			return
 		}
 
-		logger.Printf("collect hotfix function: %s, entry: %#x -> %#x", name, oldFuncEntrys[i].Entry, hotfixFunc.Pointer())
+		logger.Printf("validating hotfix function: %s, entry: %#x -> %#x", name, oldFuncEntrys[i].Entry, hotfixFunc.Pointer())
 
 		newFunctions = append(newFunctions, hotfixFunc)
 
@@ -203,6 +217,9 @@ func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, th
 		oldFunc := assembly.CreateFuncForCodePtr(hotfixFunc.Type(), oldFuncEntrys[i].Entry)
 		oldFunctions = append(oldFunctions, oldFunc)
 	}
+
+	t5 := time.Now()
+	logger.Printf("validating hotfix functions ... finished, cost: %s", t5.Sub(t4).String())
 
 	// 执行补丁操作
 	logger.Printf("apply patch ... patch: %s, threadSafe: %v", lib, len(threadSafe) > 0 && threadSafe[0])
@@ -217,10 +234,12 @@ func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, th
 		NewFunctions:  newFunctions,
 	})
 
+	t6 := time.Now()
+
 	if nil != returnErr {
-		logger.Printf("apply patch failed: %v", returnErr)
+		logger.Printf("apply patch failed: %v, cost: %s", returnErr, t6.Sub(t5).String())
 	} else {
-		logger.Printf("apply patch success")
+		logger.Printf("apply patch success, cost: %s", t6.Sub(t5).String())
 	}
 
 	return
