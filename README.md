@@ -20,8 +20,8 @@
 * Supported for hot patching at package/class/function
 * 支持导出函数/私有函数/成员方法修补
 * Support for exporting functions/private functions/member methods patching
-* 基于[monkey-patch](github.com/brahma-adshonor/gohook) + [plugin](https://pkg.go.dev/plugin)机制实现
-* Implemented based on [monkey-patch](github.com/brahma-adshonor/gohook) + [plugin](https://pkg.go.dev/plugin)
+* 基于[monkey-patch](https://github.com/brahma-adshonor/gohook) + [plugin](https://pkg.go.dev/plugin)机制实现
+* Implemented based on [monkey-patch](https://github.com/brahma-adshonor/gohook) + [plugin](https://pkg.go.dev/plugin)
 * 线程安全, 使用 `stw` 确保所有协程都进入安全点从而实现线程安全的补丁
 * Thread safety, use `stw` to ensure that all coroutines enter safe points to hot patching
 

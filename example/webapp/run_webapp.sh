@@ -2,6 +2,8 @@
 
 set -e
 
+# The compilation error `invalid reference to xxxx` is because `go1.23` began to limit the `go:linkname` function, and the compilation parameter must be added to turn off the restriction `-ldflags=-checklinkname=0`
+
 echo "build webapp..."
 go build -gcflags=all=-l -ldflags="-X main.HotfixVersion=main" -o webapp .
 
