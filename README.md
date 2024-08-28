@@ -1,7 +1,7 @@
 <div align="center" style="text-align: center">
 <img src="logo.png" alt="go-hotfix" width="128px"/>
 <h1>hotfix</h1>
-<p>hotfix is a golang function hot-fix solution inspired by <a href="https://github.com/lsg2020/go-hotfix">lsg2020</a></p>
+<p>hotfix is a golang function hot-fix solution</p>
 <hr/>
 </div>
 
@@ -15,7 +15,7 @@
 > 注意: 为了确保函数都能被修补，需要关闭函数内联，会因此损失一些性能  
 > Note: To ensure that all functions can be patched, function inlining needs to be disabled, which will result in a loss of some performance
 
-# Features
+## Features
 * 支持指定包级别/类级别/函数级别热补丁支持
 * Supported for hot patching at package/class/function
 * 支持导出函数/私有函数/成员方法修补
@@ -25,7 +25,7 @@
 * 线程安全, 使用 `stw` 确保所有协程都进入安全点从而实现线程安全的补丁
 * Thread safety, use `stw` to ensure that all coroutines enter safe points to hot patching
 
-# Limits
+## Limits
 * 受限于[go plugin](https://pkg.go.dev/plugin)仅支持Linux, FreeBSD, macOS，其他平台目前不支持
 * The go plugin is currently only supported on Linux, FreeBSD, and macOS platforms; other platforms are not supported
 * 加载的补丁包无法卸载，如果热修复次数过多可能导致较大的内存占用
@@ -47,11 +47,15 @@
 * **该方案处于实验性质，尚未经过严格验证**
 * **The solution is experimental in nature and has not yet been rigorously validated**
 
-# Example
+## Example
 
 参考这个[例子](./example/webapp)项目  
 Refer to this [example](./example/webapp) project
 
-### License
+
+## Acknowledgments
+This project inspired by <a href="https://github.com/lsg2020/go-hotfix">lsg2020/go-hotfix</a>
+
+## License
 
 The repository released under version 2.0 of the Apache License.
