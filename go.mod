@@ -2,14 +2,12 @@ module github.com/go-hotfix/hotfix
 
 go 1.21
 
-toolchain go1.21.0
-
 //replace github.com/go-hotfix/assembly => ../assembly
 
 require (
 	github.com/brahma-adshonor/gohook v1.1.9
-	github.com/go-delve/delve v1.23.0
-	github.com/go-hotfix/assembly v0.0.0-20240827110011-4f6cf699cdbf
+	github.com/go-delve/delve v1.23.1
+	github.com/go-hotfix/assembly v0.0.0-20241127040136-3936dfdaf772
 )
 
 require (
