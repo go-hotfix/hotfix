@@ -2,16 +2,23 @@
 
 set -e
 
-# The compilation error `invalid reference to xxxx` is because `go1.23` began to limit the `go:linkname` function, and the compilation parameter must be added to turn off the restriction `-ldflags=-checklinkname=0`
+GO_VERSION=$(go version | awk '{print $3}' | cut -c 3-)
+MIN_VERSION="1.23"
+
+if [ "$(printf "$GO_VERSION\n$MIN_VERSION" | sort -V | head -n1)" = "$MIN_VERSION" ]; then
+    GO_BUILD_LDFLAGS="-checklinkname=0"
+else
+    GO_BUILD_LDFLAGS=""
+fi
 
 echo "build webapp..."
-go build -gcflags=all=-l -ldflags="-X main.HotfixVersion=main" -o webapp .
+go build -gcflags=all=-l -ldflags="-X main.HotfixVersion=main ${GO_BUILD_LDFLAGS}" -o webapp .
 
 echo "please modify v1 plugin, press enter key to continue..."
 read input
 
 echo "build webapp plugin v1..."
-go build -gcflags=all=-l -buildmode=plugin -ldflags="-X main.HotfixVersion=v1" -o webapp_v1.so .
+go build -gcflags=all=-l -buildmode=plugin -ldflags="-X main.HotfixVersion=v1 ${GO_BUILD_LDFLAGS}" -o webapp_v1.so .
 
 echo "run main program..."
 ./webapp &
