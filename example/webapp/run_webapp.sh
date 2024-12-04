@@ -12,13 +12,13 @@ else
 fi
 
 echo "build webapp..."
-go build -gcflags=all=-l -ldflags="-X main.HotfixVersion=main ${GO_BUILD_LDFLAGS}" -o webapp .
+go build -gcflags="all=-l -N" -ldflags="-X main.HotfixVersion=main ${GO_BUILD_LDFLAGS}" -o webapp .
 
 echo "please modify v1 plugin, press enter key to continue..."
 read input
 
 echo "build webapp plugin v1..."
-go build -gcflags=all=-l -buildmode=plugin -ldflags="-X main.HotfixVersion=v1 ${GO_BUILD_LDFLAGS}" -o webapp_v1.so .
+go build -gcflags="all=-l -N" -buildmode=plugin -ldflags="-X main.HotfixVersion=v1 ${GO_BUILD_LDFLAGS}" -o webapp_v1.so .
 
 echo "run main program..."
 ./webapp &

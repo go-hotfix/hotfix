@@ -34,8 +34,8 @@
 * Closures are not supported, and logic that requires hotfixes should not be placed in closures
 * 不能修改已有数据结构和函数签名，否则可能将导致程序崩溃，应该仅用于bug修复
 * Cannot modify existing data structures and function signatures, as this may lead to program crashes. It should only be used for bug fixes
-* 编译时请保留调试符号，并且禁用函数内联`-gcflags=all=-l`
-* Please keep the debugging symbols when compiling, and disable function inline `-gcflags=all=-l`
+* 编译时请保留调试符号，并且禁用函数内联`-gcflags=all=-l -N`
+* Please keep the debugging symbols when compiling, and disable function inline `-gcflags=all=-l -N`
 * 编译错误`invalid reference to xxxx` 是因为 `go1.23`开始限制了`go:linkname`功能，必须添加编译参数关闭限制`-ldflags=-checklinkname=0`
 * The compilation error `invalid reference to xxxx` is because `go1.23` began to limit the `go:linkname` function, and the compilation parameter must be added to turn off the restriction `-ldflags=-checklinkname=0`
 * 补丁包的的编译环境必须和主程序一致，包括go编译器版本，编译参数，依赖等，否则加载补丁包将会失败
