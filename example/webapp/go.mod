@@ -10,7 +10,7 @@ require (
 	github.com/brahma-adshonor/gohook v1.1.9 // indirect
 	github.com/cilium/ebpf v0.11.0 // indirect
 	github.com/go-delve/delve v1.23.1 // indirect
-	github.com/go-hotfix/assembly v0.0.0-20241204121342-6ac96712e728 // indirect
+	github.com/go-hotfix/assembly v0.0.0-20241204123141-e134f72eaf97 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	golang.org/x/arch v0.6.0 // indirect

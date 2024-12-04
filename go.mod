@@ -7,7 +7,7 @@ go 1.21
 require (
 	github.com/brahma-adshonor/gohook v1.1.9
 	github.com/go-delve/delve v1.23.1
-	github.com/go-hotfix/assembly v0.0.0-20241204121342-6ac96712e728
+	github.com/go-hotfix/assembly v0.0.0-20241204123141-e134f72eaf97
 )
 
 require (

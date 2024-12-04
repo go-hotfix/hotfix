@@ -9,8 +9,8 @@ github.com/frankban/quicktest v1.14.5 h1:dfYrrRyLtiqT9GyKXgdh+k4inNeTvmGbuSgZ3lx
 github.com/frankban/quicktest v1.14.5/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
 github.com/go-delve/delve v1.23.1 h1:MtZ13ppptttkqSuvVnwJ5CPhIAzDiOwRrYuCk3ES7fU=
 github.com/go-delve/delve v1.23.1/go.mod h1:S3SLuEE2mn7wipKilTvk1p9HdTMnXXElcEpiZ+VcuqU=
-github.com/go-hotfix/assembly v0.0.0-20241204121342-6ac96712e728 h1:t5Kkojb8vQ6HizUlUE2rcIv+a0knxqSVEZyepeZD4yE=
-github.com/go-hotfix/assembly v0.0.0-20241204121342-6ac96712e728/go.mod h1:5PRc30x3oqx6e6A0wpzXBDKqRNQa095fzgJfqt/t/ns=
+github.com/go-hotfix/assembly v0.0.0-20241204123141-e134f72eaf97 h1:358yQ1MPg9JdpEc91IOHev0n2wPJLTv6kTriZ/5MwEs=
+github.com/go-hotfix/assembly v0.0.0-20241204123141-e134f72eaf97/go.mod h1:5PRc30x3oqx6e6A0wpzXBDKqRNQa095fzgJfqt/t/ns=
 github.com/google/go-cmp v0.5.9 h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=
 github.com/google/go-cmp v0.5.9/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/hashicorp/golang-lru v1.0.2 h1:dV3g9Z/unq5DpblPpw+Oqcv4dU/1omnb4Ok8iPY6p1c=
