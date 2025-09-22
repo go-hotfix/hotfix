@@ -7,10 +7,10 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/frankban/quicktest v1.14.5 h1:dfYrrRyLtiqT9GyKXgdh+k4inNeTvmGbuSgZ3lx3GhA=
 github.com/frankban/quicktest v1.14.5/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
-github.com/go-delve/delve v1.25.1 h1:M/a9uUhITYdrHoTSZSC0D9EIuL4agpq77omDTneRre8=
-github.com/go-delve/delve v1.25.1/go.mod h1:sBjdpmDVpQd8nIMFldtqJZkk0RpGXrf8AAp5HeRi0CM=
-github.com/go-hotfix/assembly v0.0.0-20250818012505-1ff1f0fead4e h1:9WBot7KT1k36oJ6AsO2EuQpm0FnwzDvfdkuGh7+Hr08=
-github.com/go-hotfix/assembly v0.0.0-20250818012505-1ff1f0fead4e/go.mod h1:nsHjiZc3N5an2XAyz35bwutbN9r78rcn9zncYqbPqIk=
+github.com/go-delve/delve v1.25.2 h1:EI6EIWGKUEC7OVE5nfG2eQSv5xEgCRxO1+REB7FKCtE=
+github.com/go-delve/delve v1.25.2/go.mod h1:sBjdpmDVpQd8nIMFldtqJZkk0RpGXrf8AAp5HeRi0CM=
+github.com/go-hotfix/assembly v0.0.0-20250922025526-e1fe1688246c h1:FfTM3xYFpM7Wn1gKd3q3Fhw0/6aLdgDG7MV8+jQpD9c=
+github.com/go-hotfix/assembly v0.0.0-20250922025526-e1fe1688246c/go.mod h1:Xgh5dPd9u4E7TbVfZU14BNBnjEYIwmUp6nYYCH3slNE=
 github.com/google/go-cmp v0.5.9 h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=
 github.com/google/go-cmp v0.5.9/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/hashicorp/golang-lru v1.0.2 h1:dV3g9Z/unq5DpblPpw+Oqcv4dU/1omnb4Ok8iPY6p1c=

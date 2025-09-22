@@ -6,8 +6,8 @@ go 1.23.0
 
 require (
 	github.com/brahma-adshonor/gohook v1.1.9
-	github.com/go-delve/delve v1.25.1
-	github.com/go-hotfix/assembly v0.0.0-20250818012505-1ff1f0fead4e
+	github.com/go-delve/delve v1.25.2
+	github.com/go-hotfix/assembly v0.0.0-20250922025526-e1fe1688246c
 )
 
 require (
