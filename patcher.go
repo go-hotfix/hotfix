@@ -34,11 +34,35 @@ func GoMonkey() FuncPatcher {
 		}
 
 		req.Logger.Printf("monkey patching...")
+
+		// Track successfully patched functions for rollback on failure
+		patched := make([]int, 0, len(req.OldFunctions))
+
 		for i := 0; i < len(req.OldFunctions); i++ {
 			if err := gohook.HookByIndirectJmp(req.OldFunctions[i].Interface(), req.NewFunctions[i].Interface(), nil); nil != err {
-				return fmt.Errorf("patching failed: index: %d, func: %s, reason: %w", i, req.OldFuncEntrys[i].Name, err)
+				patchErr := fmt.Errorf("patching failed: index: %d, func: %s, reason: %w", i, req.OldFuncEntrys[i].Name, err)
+
+				// Rollback: unhook all previously patched functions in reverse order
+				var rollbackErrs []error
+				for j := len(patched) - 1; j >= 0; j-- {
+					idx := patched[j]
+					if unhookErr := gohook.UnHook(req.OldFunctions[idx].Interface()); unhookErr != nil {
+						req.Logger.Printf("rollback failed: index: %d, func: %s, reason: %v", idx, req.OldFuncEntrys[idx].Name, unhookErr)
+						rollbackErrs = append(rollbackErrs, fmt.Errorf("rollback failed: index: %d, func: %s: %w", idx, req.OldFuncEntrys[idx].Name, unhookErr))
+					} else {
+						req.Logger.Printf("rollback success: index: %d, func: %s", idx, req.OldFuncEntrys[idx].Name)
+					}
+				}
+
+				if len(rollbackErrs) > 0 {
+					return fmt.Errorf("%w (rolled back %d/%d functions, %d rollback errors: %v)", patchErr, len(patched)-len(rollbackErrs), len(patched), len(rollbackErrs), rollbackErrs)
+				}
+
+				return fmt.Errorf("%w (rolled back %d functions)", patchErr, len(patched))
 			}
+			patched = append(patched, i)
 		}
+
 		req.Logger.Printf("monkey patching... finished")
 		return nil
 	}

@@ -1,0 +1,10 @@
+package service
+
+// calcDiscount calculates the discount for a given price and user level.
+// Fixed: VIP users get 20% discount.
+func calcDiscount(price float64, level string) float64 {
+	if level == "vip" {
+		return price * 0.2
+	}
+	return 0
+}

@@ -36,8 +36,8 @@
 * Cannot modify existing data structures and function signatures, as this may lead to program crashes. It should only be used for bug fixes
 * 编译时请保留调试符号，并且禁用函数内联`-gcflags=all=-l -N`
 * Please keep the debugging symbols when compiling, and disable function inline `-gcflags=all=-l -N`
-* 编译错误`invalid reference to xxxx` 是因为 `go1.23`开始限制了`go:linkname`功能，必须添加编译参数关闭限制`-ldflags=-checklinkname=0`
-* The compilation error `invalid reference to xxxx` is because `go1.23` began to limit the `go:linkname` function, and the compilation parameter must be added to turn off the restriction `-ldflags=-checklinkname=0`
+* ~~编译错误`invalid reference to xxxx` 是因为 `go1.23`开始限制了`go:linkname`功能，必须添加编译参数关闭限制`-ldflags=-checklinkname=0`~~ (已修复，Go 1.23+ 无需额外编译参数)
+* ~~The compilation error `invalid reference to xxxx` is because `go1.23` began to limit the `go:linkname` function, and the compilation parameter must be added to turn off the restriction `-ldflags=-checklinkname=0`~~ (Fixed, no extra compilation flags needed for Go 1.23+)
 * 补丁包的的编译环境必须和主程序一致，包括go编译器版本，编译参数，依赖等，否则加载补丁包将会失败
 * The patch package's build environment must match that of the main program, including the Go compiler version, compilation parameters, dependencies, etc., otherwise loading the patch package will fail
 * 补丁包的`main`包下面的`init`会首先调用一次，请注意不要重复初始化

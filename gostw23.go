@@ -2,7 +2,12 @@
 
 package hotfix
 
-import _ "unsafe"
+import (
+	"reflect"
+
+	"github.com/go-hotfix/assembly"
+	"github.com/go-hotfix/assembly/linkname"
+)
 
 // stwReason is an enumeration of reasons the world is stopping.
 type stwReason uint8
@@ -16,13 +21,31 @@ type worldStop struct {
 	stoppingCPUTime  int64
 }
 
-var _stopFlag worldStop
+var (
+	_stopTheWorld  func(reason stwReason) worldStop
+	_startTheWorld func(w worldStop)
+	_stopFlag      worldStop
+)
 
-//go:linkname _stopTheWorld runtime.stopTheWorld
-func _stopTheWorld(reason stwReason) worldStop
+func init() {
+	// Runtime function discovery via moduledata — bypasses go:linkname restriction in Go 1.23+
+	stopTheWorldPC := linkname.FuncPCForName("runtime.stopTheWorld")
+	if stopTheWorldPC == 0 {
+		panic("go-hotfix: runtime function not found: runtime.stopTheWorld")
+	}
+	startTheWorldPC := linkname.FuncPCForName("runtime.startTheWorld")
+	if startTheWorldPC == 0 {
+		panic("go-hotfix: runtime function not found: runtime.startTheWorld")
+	}
 
-//go:linkname _startTheWorld runtime.startTheWorld
-func _startTheWorld(w worldStop)
+	_stopTheWorld = assembly.CreateFuncForCodePtr(
+		reflect.TypeOf(_stopTheWorld), uint64(stopTheWorldPC),
+	).Interface().(func(stwReason) worldStop)
+
+	_startTheWorld = assembly.CreateFuncForCodePtr(
+		reflect.TypeOf(_startTheWorld), uint64(startTheWorldPC),
+	).Interface().(func(worldStop))
+}
 
 //go:nosplit
 func startTheWorld() {
@@ -32,6 +55,5 @@ func startTheWorld() {
 
 //go:nosplit
 func stopTheWorld() {
-	// stwUnknown stwReason = iota // "unknown"
 	_stopFlag = _stopTheWorld(0)
 }
