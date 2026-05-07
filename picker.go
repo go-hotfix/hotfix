@@ -9,17 +9,21 @@ import (
 	"github.com/go-hotfix/assembly"
 )
 
+// closureExp matches closure identifiers (e.g. "func1", "func1.2") that
+// cannot be hot-patched.
 var closureExp = regexp.MustCompile(`func\d+(\.\d+)*`)
 
-// FuncPicker List of functions that need to be hotfix.
+// FuncPicker selects which functions should be hot-patched. Given a
+// DwarfAssembly for runtime introspection, it returns the fully qualified
+// names of the target functions.
 type FuncPicker func(dwarfAssembly assembly.DwarfAssembly) ([]string, error)
 
-// Func to specify one or more functions, you must use the full qualified name of the function.
+// Func returns a FuncPicker that selects specific functions by their fully
+// qualified names. Names must use the Go runtime format:
 //
 //	example/data.TestAdd
 //	example/data.(*DataType).TestHotfix
 //	example/data.testPrivateFunc
-//	example/data.(*DataType).test
 func Func(funcNames ...string) FuncPicker {
 	return func(_ assembly.DwarfAssembly) ([]string, error) {
 		for _, name := range funcNames {
@@ -31,21 +35,20 @@ func Func(funcNames ...string) FuncPicker {
 	}
 }
 
-// Classes To fix a specified class or classes (all member functions), the fully qualified name of the class must be used.
+// Classes returns a FuncPicker that selects all methods of the specified
+// struct types. The className must be the fully qualified type name:
 //
-//	example/data.DataType
-//	*example/data.DataType
+//	example/data.DataType        — value receiver methods
+//	*example/data.DataType       — pointer receiver methods
 func Classes(classNames ...string) FuncPicker {
 	return func(dwarfAssembly assembly.DwarfAssembly) ([]string, error) {
 		var methods []string
 		for _, className := range classNames {
-			// 查找类型
 			classType, err := dwarfAssembly.FindType(className)
 			if nil != err {
 				return nil, fmt.Errorf("%w: class not found: %s", err, className)
 			}
 
-			// 检查类型必须是 struct/*struct
 			if reflect.Struct != classType.Kind() && (reflect.Ptr != classType.Kind() || classType.Elem().Kind() != reflect.Struct) {
 				return nil, fmt.Errorf("%s is not a struct or *struct (%s)", className, classType.String())
 			}
@@ -57,49 +60,46 @@ func Classes(classNames ...string) FuncPicker {
 
 			var prefixName string
 			if isPtr {
-				// example.data.(*DataType).String
 				prefixName = classType.PkgPath() + ".(*" + classType.Name() + ")."
 			} else {
-				// example.data.DataType.String
 				prefixName = classType.PkgPath() + "." + classType.Name() + "."
 			}
 
-			dwarfAssembly.ForeachFunc(func(name string, pc uint64) bool {
+			for name := range dwarfAssembly.Funcs() {
 				if strings.HasPrefix(name, prefixName) && !closureExp.MatchString(name) {
 					methods = append(methods, name)
 				}
-				return true
-			})
+			}
 		}
 
 		return methods, nil
 	}
 }
 
-// Package To fix all export, private, and member functions in one or more packages, the full package name must be used
+// Package returns a FuncPicker that selects all functions and methods
+// belonging to the specified package(s). The pkg must be the full
+// import path:
 //
 //	example/data
 func Package(pkgs ...string) FuncPicker {
 	return func(dwarfAssembly assembly.DwarfAssembly) ([]string, error) {
 		var methods []string
 		for _, pkg := range pkgs {
-
-			// example/data.testPrivateFunc
-			// example/data.(*DataType).TestHotfix
 			var prefixName = pkg
 
-			dwarfAssembly.ForeachFunc(func(name string, pc uint64) bool {
+			for name := range dwarfAssembly.Funcs() {
 				if strings.HasPrefix(name, prefixName) && !closureExp.MatchString(name) {
 					methods = append(methods, name)
 				}
-				return true
-			})
+			}
 		}
 		return methods, nil
 	}
 }
 
-// Any combine multiple FuncPicker
+// Any combines multiple FuncPickers into one. The selected function names
+// are concatenated in order. If any picker returns an error, the combined
+// picker returns that error immediately.
 func Any(funcPickers ...FuncPicker) FuncPicker {
 	return func(dwarfAssembly assembly.DwarfAssembly) ([]string, error) {
 		var methods []string

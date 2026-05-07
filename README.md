@@ -1,61 +1,124 @@
-<div align="center" style="text-align: center">
+<div align="center">
 <img src="logo.png" alt="go-hotfix" width="128px"/>
 <h1>hotfix</h1>
-<p>hotfix is a golang function hot-fix solution</p>
-<hr/>
+<p>Runtime function hot-patching for Go applications</p>
 </div>
 
+---
 
-> 警告: 目前尚未经过严格测试，请勿用于生产环境  
-> Warning: This has not been rigorously tested, do not use in production environment
+> **Warning:** This project is experimental. Do not use in production without thorough testing.
 
-> 注意: 不支持Windows  
-> Note: Windows is not supported
+## How It Works
 
-> 注意: 为了确保函数都能被修补，需要关闭函数内联，会因此损失一些性能  
-> Note: To ensure that all functions can be patched, function inlining needs to be disabled, which will result in a loss of some performance
+`hotfix` patches running Go functions at runtime using [gomonkey](https://github.com/agiledragon/gomonkey) + [go plugin](https://pkg.go.dev/plugin):
+
+1. Build a fixed version of your code as a `.so` plugin
+2. Load the plugin into the running process
+3. Redirect old function calls to the new implementations via binary patching
 
 ## Features
-* 支持指定包级别/类级别/函数级别热补丁支持
-* Supported for hot patching at package/class/function
-* 支持导出函数/私有函数/成员方法修补
-* Support for exporting functions/private functions/member methods patching
-* 基于[monkey-patch](https://github.com/brahma-adshonor/gohook) + [plugin](https://pkg.go.dev/plugin)机制实现
-* Implemented based on [monkey-patch](https://github.com/brahma-adshonor/gohook) + [plugin](https://pkg.go.dev/plugin)
-* 线程安全, 使用 `stw` 确保所有协程都进入安全点从而实现线程安全的补丁
-* Thread safety, use `stw` to ensure that all coroutines enter safe points to hot patching
 
-## Limits
-* 受限于[go plugin](https://pkg.go.dev/plugin)仅支持Linux, FreeBSD, macOS，其他平台目前不支持
-* The go plugin is currently only supported on Linux, FreeBSD, and macOS platforms; other platforms are not supported
-* 加载的补丁包无法卸载，如果热修复次数过多可能导致较大的内存占用
-* The loaded patch package cannot be uninstalled. Too many hot fixes may result in large memory usage
-* 不支持对闭包进行修复，需要热修复的逻辑不要放在闭包中
-* Closures are not supported, and logic that requires hotfixes should not be placed in closures
-* 不能修改已有数据结构和函数签名，否则可能将导致程序崩溃，应该仅用于bug修复
-* Cannot modify existing data structures and function signatures, as this may lead to program crashes. It should only be used for bug fixes
-* 编译时请保留调试符号，并且禁用函数内联`-gcflags=all=-l -N`
-* Please keep the debugging symbols when compiling, and disable function inline `-gcflags=all=-l -N`
-* ~~编译错误`invalid reference to xxxx` 是因为 `go1.23`开始限制了`go:linkname`功能，必须添加编译参数关闭限制`-ldflags=-checklinkname=0`~~ (已修复，Go 1.23+ 无需额外编译参数)
-* ~~The compilation error `invalid reference to xxxx` is because `go1.23` began to limit the `go:linkname` function, and the compilation parameter must be added to turn off the restriction `-ldflags=-checklinkname=0`~~ (Fixed, no extra compilation flags needed for Go 1.23+)
-* 补丁包的的编译环境必须和主程序一致，包括go编译器版本，编译参数，依赖等，否则加载补丁包将会失败
-* The patch package's build environment must match that of the main program, including the Go compiler version, compilation parameters, dependencies, etc., otherwise loading the patch package will fail
-* 补丁包的`main`包下面的`init`会首先调用一次，请注意不要重复初始化
-* The 'init' under the 'main' package of the patch package will be called once first, be careful not to initialize it repeatedly
-* 打补丁包时`main`包必须产生变化，否则可能出现 `plugin already loaded`错误，推荐使用 `-ldflags="-X main.HotfixVersion=v1.0.1"`指定版本号， 确保每次编译补丁包都会有变化
-* The `main` package must be changed when applying the patch package, otherwise the `plugin already loaded` error may occur. It is recommended to use `-ldflags="-X main.HotfixVersion=v1.0.1"` to specify the version number to ensure that the patch package is compiled every time There will be changes
-* **该方案处于实验性质，尚未经过严格验证**
-* **The solution is experimental in nature and has not yet been rigorously validated**
+- Patch at **package**, **class**, or **function** granularity
+- Patch exported functions, private functions, and struct methods
+- Thread-safe patching via stop-the-world (STW) mechanism
+- Support for generic functions (Go 1.18+)
+- Linux (amd64, arm64) and macOS (amd64, arm64/Apple Silicon)
+
+## Quick Start
+
+```bash
+# Build your application with inlining disabled
+go build -gcflags="all=-l -N" -o myapp .
+
+# Run it
+./myapp
+
+# Build a patch plugin from the fixed source
+go build -gcflags="all=-l -N" -buildmode=plugin -o patch_v1.so .
+
+# Apply the patch (via API call, HTTP handler, etc.)
+```
+
+## Usage
+
+### Basic
+
+```go
+import "github.com/go-hotfix/hotfix"
+
+// Patch specific functions
+result := hotfix.Hotfix("patch_v1.so", hotfix.Func(
+    "myapp/service.CalcPrice",
+    "myapp/service.(*Order).Total",
+))
+
+// Patch all methods of a struct
+result := hotfix.Hotfix("patch_v1.so", hotfix.Classes(
+    "myapp/service.Order",        // value receiver methods
+    "*myapp/service.Order",       // pointer receiver methods
+))
+
+// Patch all functions in a package
+result := hotfix.Hotfix("patch_v1.so", hotfix.Package("myapp/service"))
+
+// Combine multiple pickers
+result := hotfix.Hotfix("patch_v1.so", hotfix.Any(
+    hotfix.Func("myapp/service.CalcPrice"),
+    hotfix.Package("myapp/util"),
+))
+```
+
+### Result
+
+```go
+result := hotfix.Hotfix("patch.so", picker)
+if result.Err != nil {
+    log.Fatal(result.Err)
+}
+fmt.Printf("patched %d functions in %s\n", len(result.Methods), result.Cost)
+fmt.Println(result.Message) // debug log
+```
+
+### Custom Patcher
+
+```go
+// Use the default gomonkey-based patcher
+result := hotfix.DoHotfix("patch.so", picker, hotfix.GoMonkey())
+
+// Or provide your own FuncPatcher implementation
+result := hotfix.DoHotfix("patch.so", picker, myCustomPatcher)
+```
 
 ## Example
 
-参考这个[例子](./example/webapp)项目  
-Refer to this [example](./example/webapp) project
+A complete web application example is in [`example/webapp`](./example/webapp), demonstrating:
 
+- A running HTTP server with a bug in `calcDiscount`
+- Building a fixed plugin
+- Applying the hotfix at runtime
+- Verifying the fix without restarting the server
+
+## Limitations
+
+- **Platforms:** Linux and macOS only (due to `go plugin` constraints)
+- **No closure patching:** Logic requiring hotfixes must not reside in closures
+- **No signature changes:** Cannot modify data structures or function signatures — use only for bug fixes
+- **Build flags:** The target program must be compiled with `-gcflags="all=-l -N"` (disable inlining and optimizations)
+- **Environment consistency:** The plugin must be built with the same Go compiler version, build flags, and dependencies as the main program
+- **No unloading:** Loaded plugins cannot be unloaded; excessive patching may increase memory usage
+- **Plugin uniqueness:** Each plugin's `main` package must differ from previously loaded ones. Use `-ldflags="-X main.HotfixVersion=v1.0.1"` to ensure uniqueness
+- **Init execution:** The plugin's `main` package `init` functions run once on load — avoid duplicate initialization
+
+## Testing
+
+```bash
+go test -gcflags="all=-l" -v ./...
+```
 
 ## Acknowledgments
-This project inspired by <a href="https://github.com/lsg2020/go-hotfix">lsg2020/go-hotfix</a>
+
+Inspired by [lsg2020/go-hotfix](https://github.com/lsg2020/go-hotfix).
 
 ## License
 
-The repository released under version 2.0 of the Apache License.
+Apache License 2.0

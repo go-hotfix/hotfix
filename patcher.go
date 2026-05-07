@@ -2,68 +2,76 @@ package hotfix
 
 import (
 	"fmt"
+	"reflect"
 
-	"github.com/brahma-adshonor/gohook"
+	"github.com/agiledragon/gomonkey/v2"
 )
 
-// FuncPatcher To apply function hot patching.
+// FuncPatcher applies binary patches to redirect function calls.
+// Implementations receive a fully populated Request and must return
+// a non-nil error if patching fails.
 type FuncPatcher func(req Request) error
 
-// GoMonkey Hot patching implementation based on monkey-patching.
+// GoMonkey returns a FuncPatcher that uses gomonkey to rewrite function
+// entry points. It performs type validation before entering stop-the-world
+// (STW) to ensure thread-safe binary patching. If patching fails partway
+// through, all previously applied patches are rolled back.
 func GoMonkey() FuncPatcher {
-	return func(req Request) error {
-		// 代码热修复采用monkey-patch机制实现函数调用重定向（重写跳转指令）
-		// 因为写跳转指令是非原子性的，因此在多线程环境无法保证安全的重写跳转指令
-		// 需要一些方案确保能安全的重写跳转指令
-		// 1. ptrace 使用外部程序模拟调试器行为（挂起程序，如果程序正在函数中则单步执行直到跳出函数调用范围）
-		// 2. 程序内部保证（模拟类似safe-point机制）
-		// 3. 参考runtime.GC使程序进入stw状态后重写跳转指令
+	return func(req Request) (err error) {
+		logger := req.Logger
 
-		// 这里采用第三种方案，使程序进入stw装后进行补丁操作
-		// 如果线程不安全则采用stw的方式确保补丁能安全执行,避免线程安全问题
-		if !req.ThreadSafe {
-			req.Logger.Printf("enter stw...")
-			stopTheWorld()
-			req.Logger.Printf("enter stw... finished")
-
-			defer func() {
-				req.Logger.Printf("leave stw...")
-				startTheWorld()
-				req.Logger.Printf("leave stw... finished")
-			}()
+		logger.Printf("  validating function types")
+		if err := validateFuncTypes(req.OldFunctions, req.NewFunctions); err != nil {
+			return err
 		}
 
-		req.Logger.Printf("monkey patching...")
+		// Binary patching is non-atomic: STW ensures no goroutine is
+		// executing the code being overwritten.
+		logger.Printf("  stop-the-world: pausing all goroutines")
+		stopTheWorld()
 
-		// Track successfully patched functions for rollback on failure
-		patched := make([]int, 0, len(req.OldFunctions))
+		defer func() {
+			startTheWorld()
+			logger.Printf("  stop-the-world: resuming all goroutines")
+		}()
+
+		logger.Printf("  rewriting %d function entry/entries", len(req.OldFunctions))
+
+		patches := gomonkey.NewPatches()
+		patched := 0
+
+		defer func() {
+			if r := recover(); r != nil {
+				patches.Reset()
+				patchErr := fmt.Errorf("patching failed: %v", r)
+				if patched > 0 {
+					err = fmt.Errorf("%w (rolled back %d functions)", patchErr, patched)
+				} else {
+					err = patchErr
+				}
+			}
+		}()
 
 		for i := 0; i < len(req.OldFunctions); i++ {
-			if err := gohook.HookByIndirectJmp(req.OldFunctions[i].Interface(), req.NewFunctions[i].Interface(), nil); nil != err {
-				patchErr := fmt.Errorf("patching failed: index: %d, func: %s, reason: %w", i, req.OldFuncEntrys[i].Name, err)
-
-				// Rollback: unhook all previously patched functions in reverse order
-				var rollbackErrs []error
-				for j := len(patched) - 1; j >= 0; j-- {
-					idx := patched[j]
-					if unhookErr := gohook.UnHook(req.OldFunctions[idx].Interface()); unhookErr != nil {
-						req.Logger.Printf("rollback failed: index: %d, func: %s, reason: %v", idx, req.OldFuncEntrys[idx].Name, unhookErr)
-						rollbackErrs = append(rollbackErrs, fmt.Errorf("rollback failed: index: %d, func: %s: %w", idx, req.OldFuncEntrys[idx].Name, unhookErr))
-					} else {
-						req.Logger.Printf("rollback success: index: %d, func: %s", idx, req.OldFuncEntrys[idx].Name)
-					}
-				}
-
-				if len(rollbackErrs) > 0 {
-					return fmt.Errorf("%w (rolled back %d/%d functions, %d rollback errors: %v)", patchErr, len(patched)-len(rollbackErrs), len(patched), len(rollbackErrs), rollbackErrs)
-				}
-
-				return fmt.Errorf("%w (rolled back %d functions)", patchErr, len(patched))
-			}
-			patched = append(patched, i)
+			patches.ApplyFunc(req.OldFunctions[i].Interface(), req.NewFunctions[i].Interface())
+			patched++
 		}
 
-		req.Logger.Printf("monkey patching... finished")
 		return nil
 	}
+}
+
+// validateFuncTypes checks that each old/new function pair has matching types.
+func validateFuncTypes(oldFuncs, newFuncs []reflect.Value) error {
+	if len(oldFuncs) != len(newFuncs) {
+		return fmt.Errorf("function count mismatch: old=%d, new=%d", len(oldFuncs), len(newFuncs))
+	}
+	for i := 0; i < len(oldFuncs); i++ {
+		oldType := oldFuncs[i].Type()
+		newType := newFuncs[i].Type()
+		if oldType != newType {
+			return fmt.Errorf("type mismatch at index %d: target type(%s) and double type(%s) are different", i, oldType, newType)
+		}
+	}
+	return nil
 }

@@ -18,48 +18,62 @@ import (
 	"github.com/go-hotfix/assembly"
 )
 
+// exclusivity is a global lock that prevents concurrent hotfix operations.
 var exclusivity int32
 
+// Request contains all the information needed to apply a hot patch.
 type Request struct {
-	Logger        *log.Logger            // Debug logger.
-	Patch         string                 // Plugin file.
-	ThreadSafe    bool                   // Whether it is thread safe.
-	Methods       []string               // Patching function list.
-	Assembly      assembly.DwarfAssembly // Go runtime assembly.
-	OldFuncEntrys []*proc.Function       // Old function entrys.
-	OldFunctions  []reflect.Value        // Old function values.
-	NewFunctions  []reflect.Value        // Plugin function values.
+	// Logger receives debug log output during the patching process.
+	Logger *log.Logger
+	// Patch is the file path of the loaded plugin (.so).
+	Patch string
+	// Methods is the list of fully qualified function names to patch.
+	Methods []string
+	// Assembly provides DWARF-based access to runtime type and function information.
+	Assembly assembly.DwarfAssembly
+	// OldFuncEntrys contains the original function entry points from the main binary.
+	OldFuncEntrys []*proc.Function
+	// OldFunctions holds callable reflect.Values pointing to the original function entry points.
+	OldFunctions []reflect.Value
+	// NewFunctions holds callable reflect.Values from the loaded plugin.
+	NewFunctions []reflect.Value
 }
 
+// Result contains the outcome of a hotfix operation.
 type Result struct {
-	Assembly   assembly.DwarfAssembly
-	Patch      string        // Plugin file
-	ThreadSafe bool          // Whether it is thread safe, the default is false, use stw mechanism to ensure thread safety.
-	Methods    []string      // Patching function list.
-	Cost       time.Duration // Total of cost time.
-	Err        error         // Patching failed reason.
-	Message    string        // Patching debug message.
+	// Assembly is the DWARF assembly used during the operation.
+	Assembly assembly.DwarfAssembly
+	// Patch is the resolved file path of the loaded plugin.
+	Patch string
+	// Methods is the list of function names that were patched.
+	Methods []string
+	// Cost is the total wall-clock time of the operation.
+	Cost time.Duration
+	// Err is non-nil if the operation failed.
+	Err error
+	// Message contains the debug log output from the operation.
+	Message string
 }
 
-// Hotfix Apply hot patching by default.
-func Hotfix(libPath string, funcPicker FuncPicker, threadSafe ...bool) Result {
-	return DoHotfix(libPath, funcPicker, GoMonkey(), threadSafe...)
+// Hotfix applies a hot patch using the default gomonkey-based patcher.
+// libPath is the file path of the plugin (.so) built from the fixed source.
+// funcPicker selects which functions to patch.
+func Hotfix(libPath string, funcPicker FuncPicker) Result {
+	return DoHotfix(libPath, funcPicker, GoMonkey())
 }
 
-// DoHotfix Apply hot patching in a custom way.
-func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, threadSafe ...bool) (result Result) {
-
+// DoHotfix applies a hot patch using a custom FuncPatcher implementation.
+func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher) (result Result) {
 	var start = time.Now()
 	var funcNames []string
 	var returnErr error
 	var output bytes.Buffer
-	var logger = log.New(&output, "[hotfix]", log.LstdFlags|log.Lshortfile)
+	var logger = log.New(&output, "[hotfix] ", log.LstdFlags|log.Lshortfile)
 
 	defer func() {
 		rr := recover()
 
 		result.Patch = libPath
-		result.ThreadSafe = len(threadSafe) > 0 && threadSafe[0]
 		result.Methods = funcNames
 		result.Cost = time.Since(start)
 		result.Message = strings.TrimSpace(output.String())
@@ -77,42 +91,33 @@ func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, th
 		}
 	}()
 
-	// 获取全局独占锁
-	// 不允许并发执行热修复
+	// Acquire exclusive lock — only one hotfix can run at a time.
 	if !atomic.CompareAndSwapInt32(&exclusivity, 0, 1) {
 		returnErr = fmt.Errorf("an other hotfix in processing")
 		return
 	}
-
-	// 释放全局独占锁
 	defer atomic.StoreInt32(&exclusivity, 0)
 
-	logger.Printf("arch: %s/%s, compiler: %s/%s, cpu: %d-bit, jump code size: %d", runtime.GOOS, runtime.GOARCH, runtime.Compiler, runtime.Version(), archMode, jumpCodeSize)
+	logger.Printf("env: %s/%s go%s %dbit trampoline=%d", runtime.GOOS, runtime.GOARCH, runtime.Version()[2:], archMode, jumpCodeSize)
 
 	t0 := time.Now()
 
-	// 加载主程序集
-	logger.Printf("loading main assembly ...")
+	// Load DWARF debug info for the main binary.
+	logger.Printf("loading main binary debug symbols")
 	if result.Assembly, returnErr = assembly.NewDwarfAssembly(); nil != returnErr {
 		returnErr = fmt.Errorf("main assembly load failed: %w", returnErr)
 		return
 	}
 
-	t1 := time.Now()
+	logger.Printf("main binary loaded, cost: %s", time.Since(t0))
 
-	logger.Printf("load main assembly finished, cost: %s", t1.Sub(t0).String())
-
-	// 输出当前已经加载的插件
-	if plugins, addrs, err := result.Assembly.SearchPlugins(); nil == err {
-		for i, plug := range plugins {
-			if 0 != addrs[i] {
-				logger.Printf("loaded dynamic library: %s@%#x", plug, addrs[i])
-			}
-		}
+	for plug := range result.Assembly.Plugins() {
+		logger.Printf("loaded library: %s", plug)
 	}
 
-	// 加载需要热修复的函数
-	logger.Printf("lookup patch functions ...")
+	// Resolve the list of functions to patch.
+	t1 := time.Now()
+	logger.Printf("resolving target functions")
 	funcNames, returnErr = funcPicker(result.Assembly)
 	if nil != returnErr {
 		return
@@ -123,24 +128,21 @@ func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, th
 		return
 	}
 
-	// 删除重复的项目
 	funcNames = uniqStrings(funcNames)
-	// 排序一下
 	sort.Strings(funcNames)
 
-	// 检查待热更的函数是否存在
+	// Verify each function exists in the main binary and has enough code space.
 	oldFuncEntrys := make([]*proc.Function, 0, len(funcNames))
 	for _, name := range funcNames {
-		// 查找当前等待补丁的函数地址
-		entry, err := result.Assembly.FindFuncEntry(name)
+		entry, err := result.Assembly.FindFunc(name)
 		if nil != err {
 			returnErr = fmt.Errorf("%w: function not found: %s", err, name)
 			return
 		}
 
-		logger.Printf("find function: %s, entry: %#x, codeSpace: %d", name, entry.Entry, entry.End-entry.Entry)
+		logger.Printf("  %s: entry=%#x size=%d", name, entry.Entry, entry.End-entry.Entry)
 
-		// jump code 代码不能比原有的代码还长，否则将产生覆写，这里直接拒绝
+		// The jump code must fit within the original function body.
 		if size := entry.End - entry.Entry; size < jumpCodeSize {
 			returnErr = fmt.Errorf("jump code overflow: %s, size: %d, required: %d", name, size, jumpCodeSize)
 			return
@@ -149,84 +151,78 @@ func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, th
 		oldFuncEntrys = append(oldFuncEntrys, entry)
 	}
 
+	logger.Printf("resolved %d target(s), cost: %s", len(funcNames), time.Since(t1))
+
+	// Load the plugin into the process address space.
 	t2 := time.Now()
-
-	logger.Printf("lookup patch functions finished, cost: %s", t2.Sub(t1).String())
-
-	// 加载动态库到进程空间
-	logger.Printf("opening patch %s ...", libPath)
+	logger.Printf("loading plugin: %s", libPath)
 	if _, err := plugin.Open(libPath); nil != err {
 		returnErr = err
 		return
 	}
 
-	// 查找的插件在主进程中的地址
-	lib, addr, err := result.Assembly.SearchPluginByName(libPath)
+	// Resolve the plugin's base address in the main process.
+	lib, addr, err := result.Assembly.FindPlugin(libPath)
 	if nil != err {
 		returnErr = fmt.Errorf("%w: plugin not found: %s", err, libPath)
 		return
 	}
 
-	// 插件查找失败
 	if "" == lib {
 		returnErr = fmt.Errorf("search plugin image failed: %s", libPath)
 		return
 	}
 
-	t3 := time.Now()
+	logger.Printf("plugin loaded: %s, cost: %s", lib, time.Since(t2))
 
-	logger.Printf("opening patch %s finished, cost: %s", lib, t3.Sub(t2).String())
-
-	// 使用完整路径
 	libPath = lib
 
-	// 加载插件符号表
-	logger.Printf("load patch assembly ...")
+	// Load DWARF debug info for the plugin.
+	t3 := time.Now()
+	logger.Printf("loading plugin debug symbols")
 	if err = result.Assembly.LoadImage(lib, addr); nil != err {
 		returnErr = fmt.Errorf("%w: load plugin assembly failed: %s", err, lib)
 		return
 	}
 
-	t4 := time.Now()
-	logger.Printf("load patch assembly finished, cost: %s", t4.Sub(t3).String())
+	logger.Printf("plugin debug symbols loaded, cost: %s", time.Since(t3))
 
-	logger.Printf("validating hotfix functions ... ")
+	// Verify that each target function exists in the plugin with a new entry point.
+	t4 := time.Now()
+	logger.Printf("validating %d function(s)", len(funcNames))
 
 	newFunctions := make([]reflect.Value, 0, len(funcNames))
 	oldFunctions := make([]reflect.Value, 0, len(funcNames))
 	for i, name := range funcNames {
-		// 查找插件补丁类型
-		hotfixFunc, err := result.Assembly.FindFunc(name, false)
+		hotfixFunc, err := result.Assembly.FindFuncValue(name, false)
 		if nil != err {
 			returnErr = fmt.Errorf("validating failed: %w: function not found: %s", err, name)
 			return
 		}
 
-		// 如果补丁中存在某个函数则在LoadAssembly中会被替换为新函数对象，函数地址会变更为补丁函数地址
-		// 如果指定的函数补丁中不存在那么无法对这个函数进行修补
+		// If the entry point is unchanged, the plugin doesn't contain this function.
 		if newEntry := hotfixFunc.Pointer(); newEntry == uintptr(oldFuncEntrys[i].Entry) {
 			returnErr = fmt.Errorf("validating failed: function not found in patch: %s", name)
 			return
 		}
 
-		logger.Printf("validating hotfix function: %s, entry: %#x -> %#x", name, oldFuncEntrys[i].Entry, hotfixFunc.Pointer())
+		logger.Printf("  %s: %#x -> %#x", name, oldFuncEntrys[i].Entry, hotfixFunc.Pointer())
 
 		newFunctions = append(newFunctions, hotfixFunc)
 
-		// 统一旧函数对象类型(插件和主程序的类型不一样)
+		// Create a callable wrapper for the old entry point using the new function's type.
 		oldFunc := assembly.CreateFuncForCodePtr(hotfixFunc.Type(), oldFuncEntrys[i].Entry)
 		oldFunctions = append(oldFunctions, oldFunc)
 	}
 
-	t5 := time.Now()
-	logger.Printf("validating hotfix functions ... finished, cost: %s", t5.Sub(t4).String())
+	logger.Printf("validation complete, cost: %s", time.Since(t4))
 
-	// 执行补丁操作
-	logger.Printf("apply patch ... patch: %s, threadSafe: %v", lib, len(threadSafe) > 0 && threadSafe[0])
+	// Apply the binary patches.
+	t5 := time.Now()
+	logger.Printf("applying patch: %s (%d function(s))", lib, len(funcNames))
 	returnErr = funcPatcher(Request{
 		Logger:        logger,
 		Patch:         libPath,
-		ThreadSafe:    len(threadSafe) > 0 && threadSafe[0],
 		Methods:       funcNames,
 		Assembly:      result.Assembly,
 		OldFuncEntrys: oldFuncEntrys,
@@ -234,12 +230,10 @@ func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, th
 		NewFunctions:  newFunctions,
 	})
 
-	t6 := time.Now()
-
 	if nil != returnErr {
-		logger.Printf("apply patch failed: %v, cost: %s", returnErr, t6.Sub(t5).String())
+		logger.Printf("patch failed: %v, cost: %s", returnErr, time.Since(t5))
 	} else {
-		logger.Printf("apply patch success, cost: %s", t6.Sub(t5).String())
+		logger.Printf("patch applied successfully, cost: %s", time.Since(t5))
 	}
 
 	return
@@ -247,19 +241,24 @@ func DoHotfix(libPath string, funcPicker FuncPicker, funcPatcher FuncPatcher, th
 
 var archMode = 64
 
+// jumpCodeSize is the size of the jump instruction generated by gomonkey:
+// arm64: 24 bytes (4x MOVZ/MOVK + LDR + BR), amd64: 14 bytes.
+var jumpCodeSize uint64
+
 func init() {
 	sz := unsafe.Sizeof(uintptr(0))
 	if sz == 4 {
 		archMode = 32
 	}
+	switch runtime.GOARCH {
+	case "arm64":
+		jumpCodeSize = 24
+	default:
+		jumpCodeSize = 14
+	}
 }
 
-// jumpCodeSize count jump code size
-var jumpCodeSize = uint64(len(genJumpCode(archMode, true, 0, 0)))
-
-//go:linkname genJumpCode github.com/brahma-adshonor/gohook.genJumpCode
-func genJumpCode(mode int, rdxIndirect bool, to, from uintptr) []byte
-
+// uniqStrings returns a deduplicated copy of the input slice, preserving order.
 func uniqStrings(collection []string) []string {
 	result := make([]string, 0, len(collection))
 	seen := make(map[string]struct{}, len(collection))
